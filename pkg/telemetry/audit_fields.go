@@ -326,8 +326,13 @@ func walkMap(node map[string]interface{}, prefix string, cfg *CompiledConfig, ke
 		// match a deeper field such as contact.name.fullName. Checking longest to
 		// shortest makes the most specific configured suffix win.
 		switch node[key].(type) {
-		case map[string]interface{}, []interface{}:
-			// Continue below so containers can be selected and traversed.
+		case map[string]interface{}:
+			// Continue below so objects can be selected and traversed.
+		case []interface{}:
+			if _, ok := findSuffixPattern(fullPath, cfg.keyToPattern); ok {
+				walkSlice(node[key].([]interface{}), fullPath+".", cfg, keepSet)
+				continue
+			}
 		default:
 			if pattern, ok := findSuffixPattern(fullPath, cfg.keyToPattern); ok {
 				node[key] = applyMask(node[key], pattern)

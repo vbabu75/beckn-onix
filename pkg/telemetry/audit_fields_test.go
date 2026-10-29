@@ -249,6 +249,37 @@ maskRules:
 	}
 }
 
+func TestProcessAuditPayload_ArraySuffixMaskingPrecedence(t *testing.T) {
+	for _, mode := range []string{"full", "selective"} {
+		t.Run(mode, func(t *testing.T) {
+			resetConfig(t)
+			url := serveYAML(t, `
+mode: `+mode+`
+patterns:
+  phone:
+    maskType: last4
+  redact:
+    maskType: replace
+    mask: "[REDACTED]"
+maskRules:
+  - keys: [phoneNumbers, scalarPhone]
+    pattern: phone
+pathOverrides:
+  - path: phoneNumbers
+    pattern: redact
+  - path: scalarPhone
+    pattern: redact
+selectedFields:
+  default: [id]
+`)
+			require.NoError(t, LoadAuditConfig(context.Background(), url))
+			body := []byte(`{"phoneNumbers":["11111111","22222222"],"scalarPhone":"11111111","id":"u1"}`)
+			out := ProcessAuditPayload(context.Background(), body)
+			assert.JSONEq(t, `{"phoneNumbers":["****1111","****2222"],"scalarPhone":"****1111","id":"u1"}`, string(out))
+		})
+	}
+}
+
 func TestProcessAuditPayload_FullMode_MasksPhoneLast4(t *testing.T) {
 	resetConfig(t)
 	url := serveYAML(t, `
