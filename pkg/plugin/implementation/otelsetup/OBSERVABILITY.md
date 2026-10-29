@@ -424,7 +424,13 @@ These headers are intentionally not masked — the Beckn `Authorization` header 
 
 The audit configuration file (`config/audit-fields.yaml`) controls a single-pass pipeline applied to every payload before the record is emitted:
 
-**Stage 1 — key-name/path-suffix masking (`maskRules`):** A plain field name is masked wherever it appears in the payload. A dot-separated suffix such as `contact.name` matches `provider.contact.name`, but not `provider.descriptor.name` or `provider.contact.name.fullName`. When multiple rules match, the most specific suffix wins.
+**Stage 1 — key-name/path-suffix masking (`maskRules`):** A plain field name matches at any nesting depth. A dot-separated suffix such as `contact.name` matches `provider.contact.name`, but not `provider.descriptor.name` or `provider.contact.name.fullName`. When multiple rules match, the most specific suffix wins.
+
+Matching scalar values are masked directly. For arrays, the matching rule is applied independently to each scalar element, preserving the array's shape, including nested arrays. Array indices are not path segments. For example, a `phoneNumbers` rule using `last4` transforms `["11111111", "22222222"]` into `["****1111", "****2222"]`. Matching scalar and array rules run before path overrides and field selection at that field; an unselected ancestor can still prevent traversal to the field.
+
+Objects are traversed rather than replaced. A rule matching an object's path does not automatically mask its descendants, including properties inside array elements. For example, `phoneNumbers` does not mask `phoneNumbers.value` in `{"phoneNumbers": [{"value": "11111111"}]}`; use `phoneNumbers.value` or `value` to mask that property.
+
+**Compatibility:** Previously, plain-key rules masked the entire matching value, including objects and arrays. Arrays now retain their structure and mask scalar elements individually. Object descendants require their own matching rules; review existing rules that previously relied on replacing a whole object.
 
 **Stage 2 — path-override masking (`pathOverrides`):** Field masking bound to a specific dot-path. Use sparingly — suffix masking is preferred when the same rule applies below multiple root paths.
 

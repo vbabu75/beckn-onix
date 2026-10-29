@@ -25,7 +25,11 @@ patterns:
     maskType: last4
 
 # maskRules — driven by a field name or dot-separated path suffix.
-# A plain field name is masked wherever it appears, regardless of nesting depth.
+# A plain field name matches at any nesting depth. Matching scalar values are
+# masked directly; scalar array elements are masked individually, preserving
+# array shape (including nested arrays). Array indices are not path segments.
+# Objects are traversed rather than replaced: a rule matching an object's path
+# does not automatically mask its descendants; those need their own matching rule.
 # A path suffix such as contact.name matches provider.contact.name, but not
 # provider.descriptor.name or provider.contact.name.fullName.
 maskRules:
