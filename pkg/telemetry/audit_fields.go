@@ -359,15 +359,20 @@ func walkMap(node map[string]interface{}, prefix string, cfg *CompiledConfig, ke
 	}
 }
 
-// walkSlice processes each element of a JSON array, forwarding the same
-// path prefix so field names inside array elements are matched correctly.
+// walkSlice masks scalar elements using the array's path and forwards the same
+// path prefix when traversing containers. Array indices are not path segments.
 func walkSlice(arr []interface{}, prefix string, cfg *CompiledConfig, keepSet map[string]struct{}) {
-	for _, elem := range arr {
+	pattern, matched := findSuffixPattern(strings.TrimSuffix(prefix, "."), cfg.keyToPattern)
+	for i, elem := range arr {
 		switch child := elem.(type) {
 		case map[string]interface{}:
 			walkMap(child, prefix, cfg, keepSet)
 		case []interface{}:
 			walkSlice(child, prefix, cfg, keepSet)
+		default:
+			if matched {
+				arr[i] = applyMask(elem, pattern)
+			}
 		}
 	}
 }

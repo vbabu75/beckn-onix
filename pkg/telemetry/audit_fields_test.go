@@ -173,6 +173,82 @@ maskRules:
 	assert.Equal(t, "txn-1", out["context"].(map[string]interface{})["transactionId"])
 }
 
+func TestProcessAuditPayload_FullMode_MasksPhoneArrayLast4(t *testing.T) {
+	resetConfig(t)
+	url := serveYAML(t, `
+mode: full
+patterns:
+  phone:
+    maskType: last4
+maskRules:
+  - keys: [phoneNumbers]
+    pattern: phone
+`)
+	require.NoError(t, LoadAuditConfig(context.Background(), url))
+
+	body := []byte(`{"phoneNumbers": ["11111111", "22222222"], "id": "u1"}`)
+	out := unmarshalJSON(t, ProcessAuditPayload(context.Background(), body))
+
+	// Mask each scalar independently while preserving the array's shape.
+	assert.Equal(t, []interface{}{"****1111", "****2222"}, out["phoneNumbers"])
+	assert.Equal(t, "u1", out["id"])
+}
+
+func TestProcessAuditPayload_FullMode_ArrayMaskingPaths(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "dotted suffix inside object array",
+			body: `{"buyers":[{"contact":{"email":"alice@example.com"}},{"contact":{"email":"bob@example.com"}}]}`,
+			want: `{"buyers":[{"contact":{"email":"[REDACTED]"}},{"contact":{"email":"[REDACTED]"}}]}`,
+		},
+		{
+			name: "nested scalar arrays preserve shape",
+			body: `{"buyer":{"phoneNumbers":[["11111111"],["22222222",[]]]}}`,
+			want: `{"buyer":{"phoneNumbers":[["****1111"],["****2222",[]]]}}`,
+		},
+		{
+			name: "replacement masks each scalar using dotted suffix",
+			body: `{"buyer":{"contact":{"email":["alice@example.com","bob@example.com"]}}}`,
+			want: `{"buyer":{"contact":{"email":["[REDACTED]","[REDACTED]"]}}}`,
+		},
+		{
+			name: "array rule does not extend to object properties",
+			body: `{"phoneNumbers":["11111111",{"value":"22222222","contact":{"email":"alice@example.com"}}]}`,
+			want: `{"phoneNumbers":["****1111",{"value":"22222222","contact":{"email":"[REDACTED]"}}]}`,
+		},
+		{
+			name: "unmatched scalar array remains unchanged",
+			body: `{"ids":["11111111","22222222"]}`,
+			want: `{"ids":["11111111","22222222"]}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetConfig(t)
+			url := serveYAML(t, `
+mode: full
+patterns:
+  phone:
+    maskType: last4
+  sensitive:
+    maskType: replace
+    mask: "[REDACTED]"
+maskRules:
+  - keys: [phoneNumbers]
+    pattern: phone
+  - keys: [contact.email]
+    pattern: sensitive
+`)
+			require.NoError(t, LoadAuditConfig(context.Background(), url))
+			out := ProcessAuditPayload(context.Background(), []byte(tc.body))
+			assert.JSONEq(t, tc.want, string(out))
+		})
+	}
+}
+
 func TestProcessAuditPayload_FullMode_MasksPhoneLast4(t *testing.T) {
 	resetConfig(t)
 	url := serveYAML(t, `
